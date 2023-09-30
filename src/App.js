@@ -1,14 +1,18 @@
+import React, { useCallback, useEffect, useState } from "react";
 import { Field } from "./components/Field";
 import { Navigation } from "./components/Navigation";
 import { ManipulationPanel } from "./components/ManipulationPanel";
 import { Button } from "./components/Button";
-import { initFields } from "./utils";
-import React, { useCallback, useEffect, useState } from "react";
+import { initFields, getFoodPosition } from "./utils";
 
 const initialPosition = { x: 17, y: 17 };
 
 const initialValues = initFields(35, initialPosition);
 const defaultInterval = 100;
+const defaultDifficulty = 3;
+
+const Difficulty = [1000, 500, 100, 50, 10];
+
 let timer = undefined;
 
 initialValues[9][9] = "food";
@@ -67,21 +71,29 @@ const isCollision = (fieldSize, position) => {
   return false;
 };
 
+const isEatingMyself = (fields, position) => {
+  return fields[position.y][position.x] === "snake";
+};
+
 function App() {
   const [fields, setFields] = useState(initialValues);
   const [body, setBody] = useState([]);
   const [status, setStatus] = useState(GameStatus.init);
   const [direction, setDirection] = useState(Direction.up);
+  const [difficulty, setDifficulty] = useState(defaultDifficulty);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    setBody([initialPosition]);
+    setBody(
+      new Array(15).fill("").map((_item, index) => ({ x: 17, y: 17 + index }))
+    );
 
+    const interval = Difficulty[difficulty - 1];
     timer = setInterval(() => {
       setTick((tick) => tick + 1);
-    }, defaultInterval);
+    }, interval);
     return unsubscribe;
-  }, []);
+  }, [difficulty]);
 
   useEffect(() => {
     if (body.length === 0 || status !== GameStatus.playing) {
@@ -100,13 +112,26 @@ function App() {
       x: x + delta.x,
       y: y + delta.y,
     };
-    if (isCollision(fields.length, newPosition)) {
+    if (
+      isCollision(fields.length, newPosition) ||
+      isEatingMyself(fields, newPosition)
+    ) {
       unsubscribe();
       return false;
     }
-    fields[y][x] = "";
+
+    const newBody = [...body];
+    if (fields[newPosition.y][newPosition.x] !== "food") {
+      const removingTrack = newBody.pop();
+      fields[removingTrack.y][removingTrack.x] = "";
+    } else {
+      const food = getFoodPosition(fields.length, [...newBody, newPosition]);
+      fields[food.y][food.x] = "food";
+    }
     fields[newPosition.y][newPosition.x] = "snake";
-    setBody([initialPosition]);
+    newBody.unshift(newPosition);
+
+    setBody(newBody);
     setFields(fields);
     return true;
   };
@@ -126,6 +151,19 @@ function App() {
       setDirection(newDirection);
     },
     [direction, status]
+  );
+
+  const onChangeDifficulty = useCallback(
+    (difficulty) => {
+      if (status !== GameStatus.init) {
+        return;
+      }
+      if (difficulty < 1 || difficulty > Difficulty.length) {
+        return;
+      }
+      setDifficulty(difficulty);
+    },
+    [status, difficulty]
   );
 
   useEffect(() => {
@@ -157,7 +195,11 @@ function App() {
         <div className="title-container">
           <h1 className="title">Snake Game</h1>
         </div>
-        <Navigation />
+        <Navigation
+          length={body.length}
+          difficulty={difficulty}
+          onChangeDifficulty={onChangeDifficulty}
+        />
       </header>
       <main className="main">
         <Field fields={fields} />
